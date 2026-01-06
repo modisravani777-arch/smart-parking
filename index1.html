@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smart Parking Finder</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+body {
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  background: linear-gradient(to right, #e0f7fa, #b2ebf2);
+}
+
+/* Splash screen */
+#splash {
+  position: fixed; top:0; left:0;
+  width:100%; height:100%;
+  background: linear-gradient(135deg,#17a2b8,#007BFF);
+  color:white; display:flex;
+  flex-direction:column; justify-content:center; align-items:center;
+  z-index:1000; font-size:24px; text-align:center;
+  transition:opacity 0.5s ease;
+}
+#splash.hidden{opacity:0; pointer-events:none;}
+#splash img{width:120px; height:120px; margin-bottom:20px;}
+#splash h1{font-size:32px;margin-bottom:10px;}
+#splash p{font-size:18px;margin-bottom:20px;}
+#splash button{padding:12px 25px;font-size:16px;border:none;border-radius:8px;cursor:pointer;background:white;color:#17a2b8;font-weight:bold;transition:0.3s;}
+#splash button:hover{background:#e6e6e6;}
+
+/* Main title */
+h1.main-title{margin-top:20px;color:#007BFF;font-size:32px;text-align:center;text-shadow:1px 1px 2px #00acc1;position:relative;}
+
+/* Hamburger menu */
+#hamburger{position:absolute; top:20px; right:20px; cursor:pointer; width:30px; height:22px; display:flex; flex-direction:column; justify-content:space-between;}
+#hamburger div{height:4px;background-color:#007BFF;border-radius:2px;}
+
+/* Menu panel */
+#menu-panel{
+  position:fixed; top:0; right:-250px; width:250px; height:100%;
+  background:#007BFF; color:white; box-shadow:-2px 0 10px rgba(0,0,0,0.3);
+  transition:right 0.3s ease; z-index:1500; display:flex; flex-direction:column; padding-top:60px;
+}
+#menu-panel.open{right:0;}
+#menu-panel ul{list-style:none;padding:0;margin:0; display:flex; flex-direction:column; gap:20px; text-align:center;}
+#menu-panel li{cursor:pointer; font-weight:bold; font-size:18px; transition:0.3s;}
+#menu-panel li:hover{color:#28a745;}
+
+/* Controls styling */
+#controls{margin:15px auto; display:flex; justify-content:center; gap:10px; flex-wrap:wrap; max-width:900px;}
+#city-input{padding:12px; width:250px; font-size:14px; border-radius:10px; border:1px solid #007BFF; outline:none; box-shadow:0 2px 5px rgba(0,0,0,0.2); transition:0.3s;}
+#city-input:focus{border-color:#00acc1; box-shadow:0 0 10px rgba(0,172,193,0.5);}
+
+/* Buttons */
+#search-btn,#refresh-btn,#loc-btn{padding:12px 25px; font-size:14px; border:none; border-radius:10px; cursor:pointer; color:white; font-weight:bold; transition:0.3s;}
+#search-btn{background:linear-gradient(45deg,#17a2b8,#00acc1);}
+#search-btn:hover{background:linear-gradient(45deg,#117a8b,#00838f);}
+#refresh-btn{background:linear-gradient(45deg,#007BFF,#0056b3);}
+#refresh-btn:hover{background:linear-gradient(45deg,#0056b3,#003f7f);}
+#loc-btn{background:linear-gradient(45deg,#28a745,#1e7e34);}
+#loc-btn:hover{background:linear-gradient(45deg,#1e7e34,#145a27);}
+
+/* Map styling */
+#map{height:70vh;width:90%;margin:20px auto 40px auto;border-radius:15px;border:2px solid #00acc1; box-shadow:0 8px 20px rgba(0,0,0,0.3);transition:0.3s;}
+
+/* Legend styling */
+#legend{width:250px;margin:0 auto 30px auto;background:rgba(255,255,255,0.9);padding:10px 15px;border-radius:10px;box-shadow:0 4px 10px rgba(0,0,0,0.2);font-size:14px;display:flex;justify-content:space-between; max-width:400px;text-align:center;}
+.legend-item{display:flex; align-items:center; gap:5px;}
+.legend-color{width:15px; height:15px; border-radius:50%; display:inline-block;}
+.free{background-color:green;}
+.occupied{background-color:red;}
+
+/* Analysis overlay */
+#analysis-overlay{position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(240,248,255,0.95); z-index:2000; display:none; flex-direction:column; align-items:center; padding-top:60px;}
+#analysis-overlay h2{color:#007BFF; margin-bottom:20px;}
+#chart-container{max-width:90%; width:700px;}
+#back-to-map{margin-top:30px; padding:10px 25px; font-size:14px; border:none; border-radius:8px; background:#28a745; color:white; font-weight:bold; cursor:pointer;}
+#back-to-map:hover{background:#1e7e34;}
+</style>
+</head>
+<body>
+
+<!-- Splash screen -->
+<div id="splash">
+  <img src="https://img.icons8.com/ios-filled/100/ffffff/parking.png" alt="App Logo">
+  <h1>SMART PARKING FINDER</h1>
+  <p>Find the best parking spots near you!</p>
+  <button id="enter-btn">Enter App</button>
+</div>
+
+<h1 class="main-title">
+  WELCOME TO SMART PARKING SPACE FINDER
+  <div id="hamburger">
+    <div></div>
+    <div></div>
+    <div></div>
+  </div>
+</h1>
+
+<!-- Hamburger menu -->
+<div id="menu-panel">
+  <ul>
+    <li id="menu-home">Home</li>
+    <li id="menu-analysis">Parking Analysis</li>
+  </ul>
+</div>
+
+<!-- Controls -->
+<div id="controls">
+  <input type="text" id="city-input" placeholder="Enter city name">
+  <button id="search-btn">Search City</button>
+  <button id="refresh-btn">Refresh Parking Spots</button>
+  <button id="loc-btn">Use My Location</button>
+</div>
+
+<!-- Map -->
+<div id="map"></div>
+
+<!-- Legend -->
+<div id="legend">
+  <div class="legend-item"><span class="legend-color free"></span> Unoccupied</div>
+  <div class="legend-item"><span class="legend-color occupied"></span> Occupied</div>
+</div>
+
+<!-- Analysis overlay -->
+<div id="analysis-overlay">
+  <h2>Parking Analysis (24 hours)</h2>
+  <div id="chart-container">
+    <canvas id="parkingChart"></canvas>
+  </div>
+  <button id="back-to-map">Back to Map</button>
+</div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script>
+let map, userMarker, parkingMarkers=[], currentCenter=null;
+
+// Map & parking functions
+function generateParkingSpots(lat,lng,count=10){
+  const spots=[];
+  for(let i=0;i<count;i++){
+    const offsetLat=(Math.random()-0.5)/500;
+    const offsetLng=(Math.random()-0.5)/500;
+    const status=Math.random()>0.5?'Free':'Occupied';
+    spots.push({lat:lat+offsetLat,lng:lng+offsetLng,status});
+  }
+  return spots;
+}
+
+function showParkingSpots(spots){
+  parkingMarkers.forEach(m=>map.removeLayer(m));
+  parkingMarkers=[];
+  spots.forEach((spot,index)=>{
+    const color=spot.status==='Free'?'green':'red';
+    const marker=L.circleMarker([spot.lat,spot.lng],{color:color,radius:8,fillOpacity:0.8}).addTo(map);
+    marker.bindPopup(`Parking Spot #${index+1} - ${spot.status}`);
+    parkingMarkers.push(marker);
+  });
+}
+
+function initMap(lat,lng){
+  currentCenter=[lat,lng];
+  if(!map){
+    map=L.map('map').setView([lat,lng],13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
+  } else { map.setView([lat,lng],13);}
+  if(userMarker) map.removeLayer(userMarker);
+  userMarker=L.marker([lat,lng]).addTo(map).bindPopup("You are here").openPopup();
+  setTimeout(()=>map.invalidateSize(),100);
+}
+
+// Splash screen
+document.getElementById('enter-btn').addEventListener('click',()=>document.getElementById('splash').classList.add('hidden'));
+
+// Buttons
+document.getElementById('refresh-btn').addEventListener('click',()=>{
+  if(!currentCenter){alert("Search a city first!"); return;}
+  const [lat,lng]=currentCenter;
+  showParkingSpots(generateParkingSpots(lat,lng,15));
+});
+
+document.getElementById('search-btn').addEventListener('click',()=>{
+  const city=document.getElementById('city-input').value.trim();
+  if(!city){alert("Enter a city"); return;}
+  fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${city}`)
+    .then(r=>r.json())
+    .then(data=>{
+      if(data.length===0){alert("City not found!"); return;}
+      const lat=parseFloat(data[0].lat), lng=parseFloat(data[0].lon);
+      initMap(lat,lng);
+      showParkingSpots(generateParkingSpots(lat,lng,15));
+    }).catch(()=>alert("Error fetching city"));
+});
+
+document.getElementById('loc-btn').addEventListener('click',()=>{
+  if(navigator.geolocation){
+    navigator.geolocation.getCurrentPosition(pos=>{
+      const lat=pos.coords.latitude,lng=pos.coords.longitude;
+      initMap(lat,lng);
+      showParkingSpots(generateParkingSpots(lat,lng,15));
+    },()=>alert("Location denied"));
+  } else alert("Geolocation not supported");
+});
+
+// Hamburger toggle
+const hamburger=document.getElementById('hamburger');
+const menuPanel=document.getElementById('menu-panel');
+hamburger.addEventListener('click',()=>menuPanel.classList.toggle('open'));
+
+// Menu actions
+document.getElementById('menu-analysis').addEventListener('click',()=>{
+  menuPanel.classList.remove('open');
+  document.getElementById('controls').style.display='none';
+  document.getElementById('map').style.display='none';
+  document.getElementById('legend').style.display='none';
+  document.getElementById('analysis-overlay').style.display='flex';
+
+  // Generate 24-hour random occupancy data
+  const hourlyData=[];
+  for(let h=0; h<24; h++) hourlyData.push(Math.floor(Math.random()*101));
+
+  const ctx=document.getElementById('parkingChart').getContext('2d');
+  if(window.parkingChart) window.parkingChart.destroy();
+  window.parkingChart=new Chart(ctx,{
+    type:'line',
+    data:{
+      labels:Array.from({length:24},(_,i)=>`${i}:00`),
+      datasets:[{
+        label:'Occupancy (%)',
+        data:hourlyData,
+        borderColor:'#007BFF',
+        backgroundColor:'rgba(0,172,193,0.2)',
+        fill:true,
+        tension:0.3,
+        pointBackgroundColor:'#007BFF'
+      }]
+    },
+    options:{
+      responsive:true,
+      scales:{
+        y:{ beginAtZero:true, max:100, title:{display:true,text:'Occupancy %'} },
+        x:{ title:{display:true,text:'Hour of Day'} }
+      }
+    }
+  });
+});
+
+document.getElementById('back-to-map').addEventListener('click',()=>{
+  document.getElementById('analysis-overlay').style.display='none';
+  document.getElementById('controls').style.display='flex';
+  document.getElementById('map').style.display='block';
+  document.getElementById('legend').style.display='flex';
+});
+
+document.getElementById('menu-home').addEventListener('click',()=>{
+  menuPanel.classList.remove('open');
+  document.getElementById('analysis-overlay').style.display='none';
+  document.getElementById('controls').style.display='flex';
+  document.getElementById('map').style.display='block';
+  document.getElementById('legend').style.display='flex';
+});
+</script>
+</body>
+</html>
